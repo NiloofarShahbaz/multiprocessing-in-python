@@ -7,7 +7,7 @@ import asgiref.sync
 from sanic import Sanic
 from sanic.response import json
 
-from limited_f import limited_f
+from limited_f import run_task_process
 
 
 async def create_task(request, user_id: int, x: int):
@@ -33,28 +33,14 @@ async def get_result(request, user_id: int, task_id: int):
 
 
 async def add_to_process_queue_bg_task():
-    print('heree!')
     while True:
         try:
             _, task_id, x = await asgiref.sync.sync_to_async(priority_q.get)(block=False)
-            # TODO: what if the mp_queue is full
             await asgiref.sync.sync_to_async(mp_queue_input.put)((task_id, x), block=False)
         except Empty:
             await asyncio.sleep(0.5)
         else:
             await asyncio.sleep(1.0)
-
-
-def run_task_process(mp_queue_input, mp_dict_output):
-    print('started!')
-    while True:
-        try:
-            task_id, x = mp_queue_input.get(timeout=0.05)
-            res = limited_f(x)
-            mp_dict_output[task_id] = {"input": x, "output": res}
-            print('sag', mp_dict_output)
-        except Empty:
-            continue
 
 
 if __name__ == '__main__':
@@ -67,6 +53,7 @@ if __name__ == '__main__':
     app.add_route(create_task, "/create_task/<user_id:int>/<x:int>")
     app.add_route(get_result, "/get_result/<user_id:int>/<task_id:int>")
     app.register_listener(lambda app, _: app.add_task(add_to_process_queue_bg_task), "after_server_start")
+
     with Manager() as mp_manager:
         mp_dict_output = mp_manager.dict()
         mp_queue_input = MPQueue()
