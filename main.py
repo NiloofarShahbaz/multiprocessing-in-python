@@ -45,7 +45,8 @@ async def add_to_process_queue_bg_task():
             await asyncio.sleep(1.0)
 
 
-def run_task_process(mp_dict_output):
+def run_task_process(mp_queue_input, mp_dict_output):
+    print('started!')
     while True:
         try:
             task_id, x = mp_queue_input.get(timeout=0.05)
@@ -61,14 +62,13 @@ if __name__ == '__main__':
     priority_q = PriorityQueue()
     user_tasks = defaultdict(list)
     task_id = -1
-    mp_queue_input = MPQueue()
 
     app = Sanic(__name__)
     app.add_route(create_task, "/create_task/<user_id:int>/<x:int>")
     app.add_route(get_result, "/get_result/<user_id:int>/<task_id:int>")
     app.register_listener(lambda app, _: app.add_task(add_to_process_queue_bg_task), "after_server_start")
     with Manager() as mp_manager:
-        with Pool(NUM_PROCESSES) as mp_pool:
-            mp_dict_output = mp_manager.dict()
-            mp_pool.map_async(run_task_process, [mp_dict_output for i in range(NUM_PROCESSES)])
+        mp_dict_output = mp_manager.dict()
+        mp_queue_input = MPQueue()
+        with Pool(NUM_PROCESSES, run_task_process, (mp_queue_input, mp_dict_output)) as mp_pool:
             app.run()
